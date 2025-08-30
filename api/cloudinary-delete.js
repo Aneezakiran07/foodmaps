@@ -1,3 +1,4 @@
+//cloudinary-delete.js
 const cloudinary = require('cloudinary').v2;
 
 // Configure Cloudinary (secrets are safe on server)
