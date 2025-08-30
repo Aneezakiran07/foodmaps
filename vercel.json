@@ -1,0 +1,17 @@
+{
+  "functions": {
+    "api/cloudinary-delete.js": {
+      "maxDuration": 30
+    },
+    "api/cloudinary-delete-multiple.js": {
+      "maxDuration": 60
+    }
+  },
+  "build": {
+    "env": {
+      "CLOUDINARY_CLOUD_NAME": "dtzhhvlaw",
+      "CLOUDINARY_API_KEY": "861551859444225", 
+      "CLOUDINARY_API_SECRET": "yLPCY0Xs6vCnp0PAszcoJ8huOOY"
+    }
+  }
+}

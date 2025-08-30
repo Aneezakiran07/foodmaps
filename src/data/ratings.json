@@ -1,0 +1,78 @@
+{
+  "1": {
+    "totalRatings": 3,
+    "averageRating": 4.3,
+    "ratings": [
+      {
+        "rating": 5,
+        "userIP": "user1",
+        "timestamp": "2024-01-15T10:30:00.000Z"
+      },
+      {
+        "rating": 4,
+        "userIP": "user2",
+        "timestamp": "2024-01-16T14:20:00.000Z"
+      },
+      {
+        "rating": 4,
+        "userIP": "user3",
+        "timestamp": "2024-01-17T18:45:00.000Z"
+      }
+    ]
+  },
+  "2": {
+    "totalRatings": 0,
+    "averageRating": 0,
+    "ratings": []
+  },
+  "3": {
+    "totalRatings": 0,
+    "averageRating": 0,
+    "ratings": []
+  },
+  "4": {
+    "totalRatings": 0,
+    "averageRating": 0,
+    "ratings": []
+  },
+  "5": {
+    "totalRatings": 0,
+    "averageRating": 0,
+    "ratings": []
+  },
+  "6": {
+    "totalRatings": 0,
+    "averageRating": 0,
+    "ratings": []
+  },
+  "7": {
+    "totalRatings": 0,
+    "averageRating": 0,
+    "ratings": []
+  },
+  "8": {
+    "totalRatings": 0,
+    "averageRating": 0,
+    "ratings": []
+  },
+  "9": {
+    "totalRatings": 0,
+    "averageRating": 0,
+    "ratings": []
+  },
+  "10": {
+    "totalRatings": 0,
+    "averageRating": 0,
+    "ratings": []
+  },
+  "11": {
+    "totalRatings": 0,
+    "averageRating": 0,
+    "ratings": []
+  },
+  "12": {
+    "totalRatings": 0,
+    "averageRating": 0,
+    "ratings": []
+  }
+} 

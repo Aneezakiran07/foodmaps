@@ -1,0 +1,45 @@
+{
+  "name": "food-directory",
+  "version": "1.0.0",
+  "description": "A directory of restaurants and food places",
+  "main": "index.js",
+  "homepage": "https://food-manual-app.web.app",
+  "scripts": {
+    "start": "react-scripts start",
+    "build": "react-scripts build",
+    "test": "react-scripts test",
+    "eject": "react-scripts eject"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@heroicons/react": "^2.2.0",
+    "@supabase/supabase-js": "^2.55.0",
+    "cloudinary": "^2.7.0",
+    "firebase": "^11.8.1",
+    "framer-motion": "^12.18.1",
+    "googleapis": "^155.0.1",
+    "lucide-react": "^0.541.0",
+    "react-icons": "^5.5.0",
+    "react-router-dom": "^6.30.1",
+    "react-scripts": "^5.0.1"
+  },
+  "devDependencies": {
+    "autoprefixer": "10.4.14",
+    "postcss": "8.4.31",
+    "tailwindcss": "3.3.3"
+  },
+  "browserslist": {
+    "production": [
+      ">0.2%",
+      "not dead",
+      "not op_mini all"
+    ],
+    "development": [
+      "last 1 chrome version",
+      "last 1 firefox version",
+      "last 1 safari version"
+    ]
+  }
+}

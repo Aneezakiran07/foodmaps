@@ -1,0 +1,53 @@
+# Environment files (make sure all variants are covered)
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Vercel
+.vercel
+
+# Firebase (since you're removing Firebase)
+.firebase/
+firebase-debug.log*
+firebase-debug.*.log*
+.firebaserc
+firebase.json
+
+# Build directories
+build/
+dist/
+
+# Dependencies
+node_modules/
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Coverage directory
+coverage
+.nyc_output
+
+# Misc
+.DS_Store
+.vscode/
+.idea/
+
+# Large files that shouldn't be in src
+src/tailwindcss.exe
+
+# Documentation files you don't need in git
+CLOUDINARY_SETUP.md
+GITHUB_GIST_SETUP.md
+src/utils/gistReviews.js
