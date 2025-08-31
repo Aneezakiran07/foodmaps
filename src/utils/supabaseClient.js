@@ -227,22 +227,96 @@ export const supabaseHelpers = {
 // Admin-specific functions
 export const adminHelpers = {
   // SIMPLIFIED: Admin login without RPC (you can implement simple auth later)
-  adminLogin: async (username, password) => {
-    try {
-      console.log('🔐 Attempting admin login...');
-      
-      // For now, use simple hardcoded check (replace with proper auth later)
-      if (username === 'admin' && password === 'admin123') {
-        console.log('✅ Admin login successful');
-        return { success: true, message: 'Login successful' };
-      } else {
-        throw new Error('Invalid credentials');
-      }
-    } catch (error) {
-      console.error('❌ Admin login error:', error);
-      throw new Error(supabaseHelpers.handleError(error));
+// Replace the adminLogin function in your supabaseClient.js with this:
+
+adminLogin: async (username, password) => {
+  try {
+    console.log('🔐 Attempting admin login for username:', username);
+    
+    // First, get the admin user from database
+    const { data: adminUser, error: fetchError } = await supabase
+      .from('admin_auth')
+      .select('*')
+      .eq('username', username)
+      .single();
+
+    if (fetchError) {
+      console.error('Admin user fetch error:', fetchError);
+      throw new Error('Invalid username or password');
     }
-  },
+
+    if (!adminUser) {
+      throw new Error('Invalid username or password');
+    }
+
+    // Check if account is locked
+    if (adminUser.locked_until && new Date(adminUser.locked_until) > new Date()) {
+      throw new Error('Account is temporarily locked. Please try again later.');
+    }
+
+    // Simple password comparison (for development)
+    // In production, you should hash the password with the salt and compare
+    const isValidPassword = password === adminUser.password_hash;
+
+    if (!isValidPassword) {
+      // Update failed attempts
+      await supabase
+        .from('admin_auth')
+        .update({ 
+          failed_attempts: adminUser.failed_attempts + 1,
+          locked_until: adminUser.failed_attempts >= 4 ? 
+            new Date(Date.now() + 15 * 60 * 1000).toISOString() : // Lock for 15 minutes after 5 attempts
+            null
+        })
+        .eq('id', adminUser.id);
+
+      throw new Error('Invalid username or password');
+    }
+
+    // Reset failed attempts and update last login
+    await supabase
+      .from('admin_auth')
+      .update({ 
+        failed_attempts: 0,
+        locked_until: null,
+        last_login: new Date().toISOString()
+      })
+      .eq('id', adminUser.id);
+
+    // Log the activity
+    await supabase
+      .from('admin_activity')
+      .insert({
+        admin_id: adminUser.id,
+        action: 'login',
+        ip_address: await supabaseHelpers.getUserIP(),
+        user_agent: navigator.userAgent
+      });
+
+    console.log('✅ Admin login successful');
+    
+    // Create session data
+    const sessionData = {
+      admin_id: adminUser.id,
+      username: adminUser.username,
+      login_time: new Date().toISOString()
+    };
+
+    return {
+      success: true,
+      message: 'Login successful',
+      jwt_payload: sessionData,
+      expires_at: new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString() // 8 hours
+    };
+
+  } catch (error) {
+    console.error('❌ Admin login error:', error);
+    return {
+      success: false,
+      error: error.message || 'Login failed'
+    };
+  }
+},
 
   // Fetch all restaurants for admin with correct schema
   fetchAllRestaurants: async () => {

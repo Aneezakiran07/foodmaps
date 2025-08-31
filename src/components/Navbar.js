@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { FiMenu, FiX } from 'react-icons/fi';
+import { FiMenu, FiX, FiTrendingUp, FiSettings } from 'react-icons/fi';
 import { Link, useLocation } from 'react-router-dom';
 
 const Navbar = () => {
@@ -55,6 +55,16 @@ const Navbar = () => {
             </Link>
 
             <Link
+              to="/whats-hot"
+              className={`${
+                isScrolled || !isHomePage ? 'text-gray-900' : 'text-white'
+              } hover:text-orange-500 transition-colors flex items-center gap-1`}
+            >
+              <FiTrendingUp className="w-4 h-4" />
+              What's Hot
+            </Link>
+
+            <Link
               to="/suggestions"
               className={`${
                 isScrolled || !isHomePage ? 'text-gray-900' : 'text-white'
@@ -70,6 +80,18 @@ const Navbar = () => {
               } hover:text-orange-500 transition-colors`}
             >
               Contact
+            </Link>
+
+            {/* Admin Link - Only visible on desktop */}
+            <Link
+              to="/admin"
+              className={`${
+                isScrolled || !isHomePage ? 'text-gray-600' : 'text-gray-300'
+              } hover:text-orange-500 transition-colors flex items-center gap-1 text-sm`}
+              title="Admin Panel"
+            >
+              <FiSettings className="w-4 h-4" />
+              Admin
             </Link>
           </div>
 
@@ -113,6 +135,15 @@ const Navbar = () => {
               </Link>
 
               <Link
+                to="/whats-hot"
+                className="flex items-center gap-2 px-3 py-2 text-gray-900 hover:text-orange-500 transition-colors"
+                onClick={() => setIsMobileMenuOpen(false)}
+              >
+                <FiTrendingUp className="w-4 h-4" />
+                What's Hot
+              </Link>
+
+              <Link
                 to="/suggestions"
                 className="block px-3 py-2 text-gray-900 hover:text-orange-500 transition-colors"
                 onClick={() => setIsMobileMenuOpen(false)}
@@ -126,6 +157,16 @@ const Navbar = () => {
                 onClick={() => setIsMobileMenuOpen(false)}
               >
                 Contact
+              </Link>
+
+              {/* Admin Link - Also in mobile menu */}
+              <Link
+                to="/admin"
+                className="flex items-center gap-2 px-3 py-2 text-gray-600 hover:text-orange-500 transition-colors border-t border-gray-200 mt-2 pt-3"
+                onClick={() => setIsMobileMenuOpen(false)}
+              >
+                <FiSettings className="w-4 h-4" />
+                Admin Panel
               </Link>
             </div>
           </motion.div>

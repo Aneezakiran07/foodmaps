@@ -1,4 +1,4 @@
-// supabaseReviews.js - Fixed wrapper to match your schema
+// supabaseReviews.js - Complete wrapper with device ID support
 import {
   getRestaurantReviews,
   addReview,
@@ -8,9 +8,8 @@ import {
   deleteReview,
   getReviewStats,
   getRecentReviews,
-  getTopRatedRestaurants // FIXED: was getTopReviews
+  getTopRatedRestaurants
 } from './supabaseReviewService.js';
-
 
 export const SupabaseReviews = {
   // Get all reviews for a restaurant
@@ -29,10 +28,10 @@ export const SupabaseReviews = {
     }
   },
 
-  // Add a new review
-  async addReview(restaurantId, reviewData, userIP = null) {
+  // Add a new review (now uses device ID)
+  async addReview(restaurantId, reviewData, deviceId = null) {
     try {
-      console.log('SupabaseReviews.addReview called with:', { restaurantId, reviewData, userIP });
+      console.log('SupabaseReviews.addReview called with:', { restaurantId, reviewData, deviceId });
       
       // Validate input data
       if (!restaurantId) {
@@ -54,7 +53,7 @@ export const SupabaseReviews = {
         return false;
       }
 
-      const result = await addReview(restaurantId, reviewData, userIP);
+      const result = await addReview(restaurantId, reviewData, deviceId);
       return result;
     } catch (error) {
       console.error('Error in SupabaseReviews.addReview:', error);
@@ -62,10 +61,10 @@ export const SupabaseReviews = {
     }
   },
 
-  // Update existing review
-  async updateReview(restaurantId, reviewData, userIP = null) {
+  // Update existing review (now uses device ID)
+  async updateReview(restaurantId, reviewData, deviceId = null) {
     try {
-      console.log('SupabaseReviews.updateReview called with:', { restaurantId, reviewData, userIP });
+      console.log('SupabaseReviews.updateReview called with:', { restaurantId, reviewData, deviceId });
       
       // Validate input data
       if (!restaurantId) {
@@ -87,7 +86,7 @@ export const SupabaseReviews = {
         return false;
       }
 
-      const result = await updateReview(restaurantId, reviewData, userIP);
+      const result = await updateReview(restaurantId, reviewData, deviceId);
       return result;
     } catch (error) {
       console.error('Error in SupabaseReviews.updateReview:', error);
@@ -95,14 +94,14 @@ export const SupabaseReviews = {
     }
   },
 
-  // Check if user has already reviewed (by IP)
-  async hasUserReviewed(restaurantId, userIP = null) {
+  // Check if user has already reviewed (now by device ID)
+  async hasUserReviewed(restaurantId, deviceId = null) {
     try {
       if (!restaurantId) {
         return false;
       }
       
-      const hasReviewed = await hasUserReviewed(restaurantId, userIP);
+      const hasReviewed = await hasUserReviewed(restaurantId, deviceId);
       return hasReviewed;
     } catch (error) {
       console.error('Error in SupabaseReviews.hasUserReviewed:', error);
@@ -110,14 +109,14 @@ export const SupabaseReviews = {
     }
   },
 
-  // Get user's previous review
-  async getUserReview(restaurantId, userIP = null) {
+  // Get user's previous review (now by device ID)
+  async getUserReview(restaurantId, deviceId = null) {
     try {
       if (!restaurantId) {
         return null;
       }
       
-      const review = await getUserReview(restaurantId, userIP);
+      const review = await getUserReview(restaurantId, deviceId);
       return review;
     } catch (error) {
       console.error('Error in SupabaseReviews.getUserReview:', error);
@@ -125,15 +124,15 @@ export const SupabaseReviews = {
     }
   },
 
-  // Delete a review
-  async deleteReview(restaurantId, userIP = null) {
+  // Delete a review (now by device ID)
+  async deleteReview(restaurantId, deviceId = null) {
     try {
       if (!restaurantId) {
         console.error('Restaurant ID is required');
         return false;
       }
       
-      const result = await deleteReview(restaurantId, userIP);
+      const result = await deleteReview(restaurantId, deviceId);
       return result;
     } catch (error) {
       console.error('Error in SupabaseReviews.deleteReview:', error);
@@ -179,7 +178,7 @@ export const SupabaseReviews = {
     }
   },
 
-  // Get top rated restaurants (FIXED: renamed from getTopReviews)
+  // Get top rated restaurants
   async getTopRatedRestaurants(limit = 5) {
     try {
       const restaurants = await getTopRatedRestaurants(limit);
@@ -197,8 +196,7 @@ export const SupabaseReviews = {
         return [];
       }
       
-      // This function was removed from the service, but if you need it
-      // you can implement it here or just return empty array
+      // This function was removed from the service, but keeping for compatibility
       console.warn('getTopReviews is deprecated, use getTopRatedRestaurants instead');
       return [];
     } catch (error) {

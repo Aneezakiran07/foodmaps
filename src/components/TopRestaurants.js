@@ -2,7 +2,8 @@ import React, { useRef, useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { FiChevronLeft, FiChevronRight, FiStar } from 'react-icons/fi';
 import { Link } from 'react-router-dom';
-import { getTopRatedRestaurants } from '../utils/supabaseRestaurantService';
+import { publicHelpers } from '../utils/supabaseClient';
+import { SupabaseRatings } from '../utils/supabaseRatingService';
 
 const TopRestaurants = () => {
   const scrollContainerRef = useRef(null);
@@ -16,10 +17,44 @@ const TopRestaurants = () => {
         setLoading(true);
         setError(null);
 
-        // Get top rated restaurants using your existing service
-        const restaurants = await getTopRatedRestaurants(10);
+        // Get all restaurants first
+        const restaurants = await publicHelpers.fetchRestaurants();
+        
+        // Get ratings for each restaurant using the same method as ShopsList
+        const restaurantsWithRatings = await Promise.all(
+          restaurants.map(async (restaurant) => {
+            try {
+              const ratingsData = await SupabaseRatings.getRestaurantRatings(restaurant.id);
+              
+              return {
+                ...restaurant,
+                averageRating: ratingsData.average || 0,
+                totalRatings: ratingsData.count || 0
+              };
+            } catch (error) {
+              console.error(`Error loading ratings for restaurant ${restaurant.id}:`, error);
+              return {
+                ...restaurant,
+                averageRating: 0,
+                totalRatings: 0
+              };
+            }
+          })
+        );
 
-        const transformedRestaurants = restaurants.map(restaurant => {
+        // Filter to only restaurants with ratings and sort by rating
+        const topRated = restaurantsWithRatings
+          .filter(restaurant => restaurant.totalRatings > 0)
+          .sort((a, b) => {
+            // Sort by average rating first, then by total ratings as tiebreaker
+            if (b.averageRating !== a.averageRating) {
+              return b.averageRating - a.averageRating;
+            }
+            return b.totalRatings - a.totalRatings;
+          })
+          .slice(0, 10);
+
+        const transformedRestaurants = topRated.map(restaurant => {
           // Handle cuisine data properly based on your new schema
           let cuisineString = 'Not specified';
           if (restaurant.cuisines) {
@@ -30,29 +65,26 @@ const TopRestaurants = () => {
               // Fallback: string format
               cuisineString = restaurant.cuisines;
             }
-          } else if (restaurant.cuisine) {
-            cuisineString = restaurant.cuisine;
           }
 
           return {
             id: restaurant.id,
             name: restaurant.name,
-            image: restaurant.image_url || restaurant.image,
+            image: restaurant.image_url,
             description: restaurant.description,
             phone: restaurant.phone,
-            location: restaurant.address || restaurant.location,
+            location: restaurant.address,
             cuisine: cuisineString,
-            averageRating: restaurant.averageRating || restaurant.avg_rating || 0,
-            totalRatings: restaurant.totalRatings || restaurant.total_reviews || 0,
+            averageRating: restaurant.averageRating,
+            totalRatings: restaurant.totalRatings,
             isActive: restaurant.is_active !== false
           };
         });
 
-        setTopRestaurants(transformedRestaurants.slice(0, 10));
+        setTopRestaurants(transformedRestaurants);
       } catch (error) {
         console.error('Error loading restaurant ratings:', error);
         setError(error.message);
-        // Don't set fallback restaurants, just show error state
         setTopRestaurants([]);
       } finally {
         setLoading(false);

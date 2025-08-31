@@ -1,9 +1,9 @@
-// FIXED SuggestionsPage.js - Proper likes/dislikes handling
+// UPDATED SuggestionsPage.js - Added user management features
 // src/components/SuggestionsPage.js
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { FiPlus, FiThumbsUp, FiThumbsDown, FiImage, FiX, FiMessageCircle, FiMaximize2, FiSearch } from 'react-icons/fi';
+import { FiPlus, FiThumbsUp, FiThumbsDown, FiImage, FiX, FiMessageCircle, FiMaximize2, FiSearch, FiEdit3, FiTrash2, FiUser, FiMail } from 'react-icons/fi';
 import SupabaseSuggestions from '../utils/supabaseSuggestions';
 import CloudinaryService from '../utils/cloudinaryService';
 
@@ -11,13 +11,16 @@ const SuggestionsPage = () => {
   const [suggestions, setSuggestions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
+  const [editingSuggestion, setEditingSuggestion] = useState(null);
   const [formData, setFormData] = useState({
     title: '',
     content: '',
     type: 'suggestion',
     restaurantName: '',
     foodItem: '',
-    images: []
+    images: [],
+    userName: '',
+    userEmail: ''
   });
   const [uploading, setUploading] = useState(false);
   const [filter, setFilter] = useState('all');
@@ -30,6 +33,8 @@ const SuggestionsPage = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchInput, setSearchInput] = useState('');
   const [reactionLoading, setReactionLoading] = useState(new Set());
+  const [showMyPosts, setShowMyPosts] = useState(false);
+  const [userSuggestions, setUserSuggestions] = useState([]);
 
   // Debug suggestions state changes
   useEffect(() => {
@@ -38,7 +43,8 @@ const SuggestionsPage = () => {
       title: s.title.substring(0, 20),
       likes: s.likes,
       dislikes: s.dislikes,
-      userReaction: s.userReaction
+      userReaction: s.userReaction,
+      canEdit: s.canEdit
     })));
   }, [suggestions]);
 
@@ -68,7 +74,7 @@ const SuggestionsPage = () => {
     return () => clearTimeout(timer);
   }, [searchInput]);
 
-  // FIXED: Simplified loadSuggestions - removed problematic early return
+  // Load suggestions
   const loadSuggestions = useCallback(async () => {
     setLoading(true);
     try {
@@ -85,7 +91,8 @@ const SuggestionsPage = () => {
           title: s.title.substring(0, 30),
           likes: s.likes,
           dislikes: s.dislikes,
-          userReaction: s.userReaction
+          userReaction: s.userReaction,
+          canEdit: s.canEdit
         })));
         setSuggestions(result.suggestions);
         setTotalPages(result.totalPages);
@@ -100,10 +107,79 @@ const SuggestionsPage = () => {
     setLoading(false);
   }, [currentPage, filter, searchQuery]);
 
+  // Load user's own suggestions
+  const loadUserSuggestions = useCallback(async () => {
+    try {
+      const result = await SupabaseSuggestions.getUserSuggestions();
+      if (result.success) {
+        setUserSuggestions(result.suggestions);
+      }
+    } catch (error) {
+      console.error('Error loading user suggestions:', error);
+    }
+  }, []);
+
   // Load when page, filter, or search changes
   useEffect(() => {
-    loadSuggestions();
-  }, [loadSuggestions]);
+    if (showMyPosts) {
+      loadUserSuggestions();
+    } else {
+      loadSuggestions();
+    }
+  }, [loadSuggestions, loadUserSuggestions, showMyPosts]);
+
+  const resetForm = () => {
+    setFormData({
+      title: '',
+      content: '',
+      type: 'suggestion',
+      restaurantName: '',
+      foodItem: '',
+      images: [],
+      userName: '',
+      userEmail: ''
+    });
+    setEditingSuggestion(null);
+    setImageError(null);
+  };
+
+  const handleEdit = (suggestion) => {
+    setEditingSuggestion(suggestion);
+    setFormData({
+      title: suggestion.title,
+      content: suggestion.content,
+      type: suggestion.type,
+      restaurantName: suggestion.restaurant_name || '',
+      foodItem: suggestion.food_item || '',
+      images: [], // Don't pre-load existing images for editing
+      userName: suggestion.user_name || '',
+      userEmail: suggestion.user_email || ''
+    });
+    setShowForm(true);
+  };
+
+  const handleDelete = async (suggestionId) => {
+    if (!window.confirm('Are you sure you want to delete this suggestion? This action cannot be undone.')) {
+      return;
+    }
+
+    try {
+      const result = await SupabaseSuggestions.deleteSuggestion(suggestionId);
+      if (result.success) {
+        alert('Suggestion deleted successfully!');
+        if (showMyPosts) {
+          loadUserSuggestions();
+        } else {
+          loadSuggestions();
+        }
+      } else {
+        alert('Failed to delete suggestion: ' + result.error);
+      }
+    } catch (error) {
+      console.error('Error deleting suggestion:', error);
+      alert('Failed to delete suggestion. Please try again.');
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -124,23 +200,28 @@ const SuggestionsPage = () => {
     setImageError(null);
 
     try {
-      const result = await SupabaseSuggestions.addSuggestion(formData);
+      let result;
+      
+      if (editingSuggestion) {
+        // Update existing suggestion
+        result = await SupabaseSuggestions.updateSuggestion(editingSuggestion.id, formData);
+      } else {
+        // Add new suggestion
+        result = await SupabaseSuggestions.addSuggestion(formData);
+      }
       
       if (result.success) {
-        setFormData({
-          title: '',
-          content: '',
-          type: 'suggestion',
-          restaurantName: '',
-          foodItem: '',
-          images: []
-        });
+        resetForm();
         setShowForm(false);
         
-        // Reload to get the new suggestion
-        await loadSuggestions();
+        // Reload suggestions
+        if (showMyPosts) {
+          loadUserSuggestions();
+        } else {
+          loadSuggestions();
+        }
         
-        alert('Your experience has been shared successfully!');
+        alert(editingSuggestion ? 'Suggestion updated successfully!' : 'Your experience has been shared successfully!');
       } else {
         throw new Error(result.error);
       }
@@ -181,9 +262,8 @@ const SuggestionsPage = () => {
     }));
   };
 
-  // FIXED: Improved reaction handling with better error recovery
+  // Reaction handling (unchanged)
   const handleReaction = async (suggestionId, reactionType) => {
-    // Prevent multiple simultaneous reactions on the same suggestion
     if (reactionLoading.has(suggestionId)) {
       console.log('Reaction already in progress for suggestion:', suggestionId);
       return;
@@ -192,36 +272,28 @@ const SuggestionsPage = () => {
     try {
       console.log(`User clicked ${reactionType} for suggestion ${suggestionId}`);
       
-      // Add to loading set
       setReactionLoading(prev => new Set([...prev, suggestionId]));
       
-      // Find the current suggestion
       const currentSuggestion = suggestions.find(s => s.id === suggestionId);
       if (!currentSuggestion) {
         console.error('Suggestion not found in state');
         return;
       }
 
-      // Store original state for potential rollback
       const originalSuggestion = { ...currentSuggestion };
       
-      // Calculate what the new reaction state should be
       const isCurrentReaction = currentSuggestion.userReaction === reactionType;
       const newUserReaction = isCurrentReaction ? null : reactionType;
       
-      // Calculate new counts based on reaction change
       let newLikes = Number(currentSuggestion.likes) || 0;
       let newDislikes = Number(currentSuggestion.dislikes) || 0;
       
-      // Remove old reaction count
       if (currentSuggestion.userReaction === 'like') newLikes = Math.max(0, newLikes - 1);
       if (currentSuggestion.userReaction === 'dislike') newDislikes = Math.max(0, newDislikes - 1);
       
-      // Add new reaction count
       if (newUserReaction === 'like') newLikes++;
       if (newUserReaction === 'dislike') newDislikes++;
 
-      // Optimistically update the UI FIRST
       setSuggestions(prevSuggestions => 
         prevSuggestions.map(suggestion => {
           if (suggestion.id === suggestionId) {
@@ -243,13 +315,11 @@ const SuggestionsPage = () => {
         newDislikes
       });
       
-      // Now send to server and wait for response
       const result = await SupabaseSuggestions.toggleReaction(suggestionId, reactionType);
       
       if (result.success) {
         console.log('Server reaction successful:', result);
         
-        // Use server counts if available, otherwise keep optimistic update
         const serverLikes = result.updatedCounts ? result.updatedCounts.likes : result.manualCounts.likes;
         const serverDislikes = result.updatedCounts ? result.updatedCounts.dislikes : result.manualCounts.dislikes;
         
@@ -278,7 +348,6 @@ const SuggestionsPage = () => {
       } else {
         console.error('Server reaction failed, reverting:', result.error);
         
-        // Revert to original state
         setSuggestions(prevSuggestions => 
           prevSuggestions.map(suggestion => {
             if (suggestion.id === suggestionId) {
@@ -294,13 +363,11 @@ const SuggestionsPage = () => {
     } catch (error) {
       console.error('Error in handleReaction:', error);
       
-      // On any error, reload from server to get fresh state
       console.log('Reloading suggestions due to error');
       await loadSuggestions();
       
       alert('Something went wrong. Please try again.');
     } finally {
-      // Remove from loading set
       setReactionLoading(prev => {
         const newSet = new Set(prev);
         newSet.delete(suggestionId);
@@ -362,6 +429,8 @@ const SuggestionsPage = () => {
     };
   }, [selectedImage, currentImageIndex, currentImages]);
 
+  const displaySuggestions = showMyPosts ? userSuggestions : suggestions;
+
   return (
     <div className="min-h-screen bg-gray-50 pt-28 pb-8">
       <div className="max-w-4xl mx-auto px-4">
@@ -376,64 +445,82 @@ const SuggestionsPage = () => {
           
           <div className="flex justify-center gap-4 mb-4">
             <button
-              onClick={() => setShowForm(true)}
+              onClick={() => {
+                resetForm();
+                setShowForm(true);
+              }}
               className="bg-orange-500 hover:bg-orange-600 text-white px-6 py-3 rounded-lg font-semibold flex items-center gap-2 transition-colors"
             >
               <FiPlus />
               Share Your Experience
             </button>
+            <button
+              onClick={() => setShowMyPosts(!showMyPosts)}
+              className={`px-6 py-3 rounded-lg font-semibold flex items-center gap-2 transition-colors ${
+                showMyPosts 
+                  ? 'bg-blue-500 hover:bg-blue-600 text-white' 
+                  : 'bg-white hover:bg-gray-50 text-gray-700 border border-gray-300'
+              }`}
+            >
+              <FiUser />
+              {showMyPosts ? 'Show All Posts' : 'My Posts'}
+            </button>
           </div>
         </div>
 
-        {/* Search Bar */}
-        <div className="max-w-md mx-auto mb-6">
-          <div className="relative">
-            <FiSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
-            <input
-              type="text"
-              value={searchInput}
-              onChange={(e) => setSearchInput(e.target.value)}
-              placeholder="Search posts... (restaurant, food, content)"
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-            />
-            {searchInput && (
-              <button
-                onClick={() => {
-                  setSearchInput('');
-                  setSearchQuery('');
-                }}
-                className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
-              >
-                <FiX size={16} />
-              </button>
-            )}
-          </div>
-        </div>
-        
-        <div className="flex justify-center mb-6">
-          <div className="bg-white rounded-lg p-1 shadow-sm">
-            {[
-              { key: 'all', label: 'All Posts', icon: '' },
-              { key: 'suggestion', label: 'Suggestions', icon: '' },
-              { key: 'complaint', label: 'Complaints', icon: '' }
-            ].map((tab) => (
-              <button
-                key={tab.key}
-                onClick={() => {
-                  setFilter(tab.key);
-                  setCurrentPage(1);
-                }}
-                className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                  filter === tab.key
-                    ? 'bg-orange-500 text-white'
-                    : 'text-gray-600 hover:text-gray-900'
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
-        </div>
+        {!showMyPosts && (
+          <>
+            {/* Search Bar */}
+            <div className="max-w-md mx-auto mb-6">
+              <div className="relative">
+                <FiSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
+                <input
+                  type="text"
+                  value={searchInput}
+                  onChange={(e) => setSearchInput(e.target.value)}
+                  placeholder="Search posts... (restaurant, food, content)"
+                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                />
+                {searchInput && (
+                  <button
+                    onClick={() => {
+                      setSearchInput('');
+                      setSearchQuery('');
+                    }}
+                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  >
+                    <FiX size={16} />
+                  </button>
+                )}
+              </div>
+            </div>
+            
+            <div className="flex justify-center mb-6">
+              <div className="bg-white rounded-lg p-1 shadow-sm">
+                {[
+                  { key: 'all', label: 'All Posts', icon: '' },
+                  { key: 'suggestion', label: 'Suggestions', icon: '' },
+                  { key: 'complaint', label: 'Complaints', icon: '' }
+                ].map((tab) => (
+                  <button
+                    key={tab.key}
+                    onClick={() => {
+                      setFilter(tab.key);
+                      setCurrentPage(1);
+                    }}
+                    className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                      filter === tab.key
+                        ? 'bg-orange-500 text-white'
+                        : 'text-gray-600 hover:text-gray-900'
+                    }`}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </>
+        )}
 
         {/* Suggestions List */}
         <div className="space-y-4">
@@ -441,16 +528,18 @@ const SuggestionsPage = () => {
             <div className="text-center py-8">
               <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-500 mx-auto"></div>
             </div>
-          ) : suggestions.length === 0 ? (
+          ) : displaySuggestions.length === 0 ? (
             <div className="text-center py-12 bg-white rounded-lg shadow-sm">
               <FiMessageCircle className="mx-auto h-12 w-12 text-gray-400 mb-4" />
               <h3 className="text-lg font-medium text-gray-900 mb-2">
-                {searchQuery ? 'No posts found' : 'No posts yet'}
+                {showMyPosts ? 'No posts by you yet' : searchQuery ? 'No posts found' : 'No posts yet'}
               </h3>
               <p className="text-gray-600">
-                {searchQuery 
-                  ? `Try searching with different keywords or check the spelling` 
-                  : 'Be the first to share your food experience!'
+                {showMyPosts 
+                  ? 'Share your first food experience!'
+                  : searchQuery 
+                    ? 'Try searching with different keywords or check the spelling' 
+                    : 'Be the first to share your food experience!'
                 }
               </p>
               {searchQuery && (
@@ -466,7 +555,7 @@ const SuggestionsPage = () => {
               )}
             </div>
           ) : (
-            suggestions.map((suggestion) => (
+            displaySuggestions.map((suggestion) => (
               <motion.div
                 key={suggestion.id}
                 initial={{ opacity: 0, y: 20 }}
@@ -481,18 +570,46 @@ const SuggestionsPage = () => {
                     }`}></div>
                     <div>
                       <h3 className="font-semibold text-gray-900">
-                        {highlightSearchTerm(suggestion.title, searchQuery)}
+                        {showMyPosts ? suggestion.title : highlightSearchTerm(suggestion.title, searchQuery)}
                       </h3>
-                      <p className="text-sm text-gray-500">{formatDate(suggestion.created_at)}</p>
+                      <div className="text-sm text-gray-500">
+                        <p>{formatDate(suggestion.created_at)}</p>
+                        {suggestion.user_name && (
+                          <p className="flex items-center gap-1 mt-1">
+                            <FiUser size={12} />
+                            <span>{suggestion.user_name}</span>
+                          </p>
+                        )}
+                      </div>
                     </div>
                   </div>
-                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                    suggestion.type === 'suggestion' 
-                      ? 'bg-green-100 text-green-800' 
-                      : 'bg-red-100 text-red-800'
-                  }`}>
-                    {suggestion.type === 'suggestion' ? 'Suggestion' : 'Complaint'}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                      suggestion.type === 'suggestion' 
+                        ? 'bg-green-100 text-green-800' 
+                        : 'bg-red-100 text-red-800'
+                    }`}>
+                      {suggestion.type === 'suggestion' ? 'Suggestion' : 'Complaint'}
+                    </span>
+                    {suggestion.canEdit && (
+                      <div className="flex gap-1">
+                        <button
+                          onClick={() => handleEdit(suggestion)}
+                          className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                          title="Edit suggestion"
+                        >
+                          <FiEdit3 size={16} />
+                        </button>
+                        <button
+                          onClick={() => handleDelete(suggestion.id)}
+                          className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                          title="Delete suggestion"
+                        >
+                          <FiTrash2 size={16} />
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 {/* Restaurant & Food Info */}
@@ -500,12 +617,12 @@ const SuggestionsPage = () => {
                   <div className="mb-4 p-3 bg-gray-50 rounded-lg">
                     {suggestion.restaurant_name && (
                       <p className="text-sm text-gray-700">
-                        <span className="font-medium">Restaurant:</span> {highlightSearchTerm(suggestion.restaurant_name, searchQuery)}
+                        <span className="font-medium">Restaurant:</span> {showMyPosts ? suggestion.restaurant_name : highlightSearchTerm(suggestion.restaurant_name, searchQuery)}
                       </p>
                     )}
                     {suggestion.food_item && (
                       <p className="text-sm text-gray-700">
-                        <span className="font-medium">Food Item:</span> {highlightSearchTerm(suggestion.food_item, searchQuery)}
+                        <span className="font-medium">Food Item:</span> {showMyPosts ? suggestion.food_item : highlightSearchTerm(suggestion.food_item, searchQuery)}
                       </p>
                     )}
                   </div>
@@ -513,7 +630,7 @@ const SuggestionsPage = () => {
 
                 {/* Content */}
                 <div className="text-gray-700 mb-4 whitespace-pre-wrap">
-                  {highlightSearchTerm(suggestion.content, searchQuery)}
+                  {showMyPosts ? suggestion.content : highlightSearchTerm(suggestion.content, searchQuery)}
                 </div>
 
                 {/* Images */}
@@ -553,41 +670,43 @@ const SuggestionsPage = () => {
                   </div>
                 )}
 
-                {/* FIXED: Reactions with proper loading state */}
-                <div className="flex items-center gap-4 pt-4 border-t border-gray-100">
-                  <button
-                    onClick={() => handleReaction(suggestion.id, 'like')}
-                    disabled={reactionLoading.has(suggestion.id)}
-                    className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-all duration-200 ${
-                      suggestion.userReaction === 'like'
-                        ? 'bg-green-100 text-green-700 border border-green-300'
-                        : 'text-gray-600 hover:text-green-600 hover:bg-green-50'
-                    } ${reactionLoading.has(suggestion.id) ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
-                  >
-                    <FiThumbsUp className={`${suggestion.userReaction === 'like' ? 'fill-current' : ''}`} size={16} />
-                    <span className="font-medium">{suggestion.likes || 0}</span>
-                  </button>
-                  
-                  <button
-                    onClick={() => handleReaction(suggestion.id, 'dislike')}
-                    disabled={reactionLoading.has(suggestion.id)}
-                    className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-all duration-200 ${
-                      suggestion.userReaction === 'dislike'
-                        ? 'bg-red-100 text-red-700 border border-red-300'
-                        : 'text-gray-600 hover:text-red-600 hover:bg-red-50'
-                    } ${reactionLoading.has(suggestion.id) ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
-                  >
-                    <FiThumbsDown className={`${suggestion.userReaction === 'dislike' ? 'fill-current' : ''}`} size={16} />
-                    <span className="font-medium">{suggestion.dislikes || 0}</span>
-                  </button>
-                </div>
+                {/* Reactions - only show for public posts */}
+                {!showMyPosts && (
+                  <div className="flex items-center gap-4 pt-4 border-t border-gray-100">
+                    <button
+                      onClick={() => handleReaction(suggestion.id, 'like')}
+                      disabled={reactionLoading.has(suggestion.id)}
+                      className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-all duration-200 ${
+                        suggestion.userReaction === 'like'
+                          ? 'bg-green-100 text-green-700 border border-green-300'
+                          : 'text-gray-600 hover:text-green-600 hover:bg-green-50'
+                      } ${reactionLoading.has(suggestion.id) ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                    >
+                      <FiThumbsUp className={`${suggestion.userReaction === 'like' ? 'fill-current' : ''}`} size={16} />
+                      <span className="font-medium">{suggestion.likes || 0}</span>
+                    </button>
+                    
+                    <button
+                      onClick={() => handleReaction(suggestion.id, 'dislike')}
+                      disabled={reactionLoading.has(suggestion.id)}
+                      className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-all duration-200 ${
+                        suggestion.userReaction === 'dislike'
+                          ? 'bg-red-100 text-red-700 border border-red-300'
+                          : 'text-gray-600 hover:text-red-600 hover:bg-red-50'
+                      } ${reactionLoading.has(suggestion.id) ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                    >
+                      <FiThumbsDown className={`${suggestion.userReaction === 'dislike' ? 'fill-current' : ''}`} size={16} />
+                      <span className="font-medium">{suggestion.dislikes || 0}</span>
+                    </button>
+                  </div>
+                )}
               </motion.div>
             ))
           )}
         </div>
 
-        {/* Pagination */}
-        {totalPages > 1 && (
+        {/* Pagination - only for public posts */}
+        {!showMyPosts && totalPages > 1 && (
           <div className="flex justify-center mt-8">
             <div className="flex gap-2">
               {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
@@ -608,7 +727,7 @@ const SuggestionsPage = () => {
         )}
       </div>
 
-      {/* Image Modal */}
+      {/* Image Modal - unchanged */}
       <AnimatePresence>
         {selectedImage && (
           <motion.div
@@ -706,7 +825,7 @@ const SuggestionsPage = () => {
         )}
       </AnimatePresence>
 
-      {/* Add Suggestion Modal */}
+      {/* Add/Edit Suggestion Modal */}
       <AnimatePresence>
         {showForm && (
           <motion.div
@@ -714,7 +833,10 @@ const SuggestionsPage = () => {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50"
-            onClick={() => setShowForm(false)}
+            onClick={() => {
+              setShowForm(false);
+              resetForm();
+            }}
           >
             <motion.div
               initial={{ scale: 0.9, opacity: 0 }}
@@ -725,9 +847,14 @@ const SuggestionsPage = () => {
             >
               <div className="p-6">
                 <div className="flex justify-between items-center mb-6">
-                  <h2 className="text-2xl font-bold text-gray-900">Share Your Experience</h2>
+                  <h2 className="text-2xl font-bold text-gray-900">
+                    {editingSuggestion ? 'Edit Your Experience' : 'Share Your Experience'}
+                  </h2>
                   <button
-                    onClick={() => setShowForm(false)}
+                    onClick={() => {
+                      setShowForm(false);
+                      resetForm();
+                    }}
                     className="text-gray-400 hover:text-gray-600"
                   >
                     <FiX size={24} />
@@ -735,6 +862,42 @@ const SuggestionsPage = () => {
                 </div>
 
                 <form onSubmit={handleSubmit} className="space-y-4">
+                  {/* User Information */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 bg-blue-50 rounded-lg">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Your Name (optional)
+                      </label>
+                      <div className="relative">
+                        <FiUser className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} />
+                        <input
+                          type="text"
+                          value={formData.userName}
+                          onChange={(e) => setFormData(prev => ({ ...prev, userName: e.target.value }))}
+                          className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500"
+                          placeholder="Your name"
+                          maxLength={255}
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Your Email (optional)
+                      </label>
+                      <div className="relative">
+                        <FiMail className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} />
+                        <input
+                          type="email"
+                          value={formData.userEmail}
+                          onChange={(e) => setFormData(prev => ({ ...prev, userEmail: e.target.value }))}
+                          className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500"
+                          placeholder="your@email.com"
+                          maxLength={320}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
                   {/* Type Selection */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -835,6 +998,11 @@ const SuggestionsPage = () => {
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Add Photos (optional, max 5 images)
+                      {editingSuggestion && (
+                        <span className="text-sm text-orange-600 ml-2">
+                          Note: Uploading new images will replace existing ones
+                        </span>
+                      )}
                     </label>
                     <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center">
                       <input
@@ -891,7 +1059,10 @@ const SuggestionsPage = () => {
                   <div className="flex gap-3 pt-4">
                     <button
                       type="button"
-                      onClick={() => setShowForm(false)}
+                      onClick={() => {
+                        setShowForm(false);
+                        resetForm();
+                      }}
                       className="flex-1 px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
                       disabled={uploading}
                     >
@@ -902,7 +1073,10 @@ const SuggestionsPage = () => {
                       disabled={uploading || !formData.title.trim() || !formData.content.trim()}
                       className="flex-1 px-4 py-2 bg-orange-500 text-white rounded-md hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      {uploading ? 'Posting...' : 'Post Experience'}
+                      {uploading 
+                        ? (editingSuggestion ? 'Updating...' : 'Posting...') 
+                        : (editingSuggestion ? 'Update Experience' : 'Post Experience')
+                      }
                     </button>
                   </div>
                 </form>

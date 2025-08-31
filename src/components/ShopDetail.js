@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
-import { FiImage, FiStar, FiMapPin, FiClock, FiX } from "react-icons/fi";
+import { FiImage, FiStar, FiMapPin, FiClock, FiX, FiChevronLeft, FiChevronRight } from "react-icons/fi";
 import RatingComponent from "./RatingComponent";
 import ReviewComponent from './ReviewComponent';
 import { publicHelpers } from '../utils/supabaseClient';
 
 export default function ShopDetail() {
   const { shopId } = useParams();
-  const [selectedImage, setSelectedImage] = useState(null);
+  const [selectedImageIndex, setSelectedImageIndex] = useState(null);
   const [restaurant, setRestaurant] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -38,14 +38,77 @@ export default function ShopDetail() {
     console.log('Menu images:', restaurant?.menu_images);
   }, [restaurant]);
 
-  const handleImageClick = (image) => {
-    console.log('Image clicked:', image);
-    setSelectedImage(image);
+  const handleImageClick = (index) => {
+    console.log('Image clicked:', index);
+    setSelectedImageIndex(index);
   };
 
   const closeModal = () => {
     console.log('Closing modal');
-    setSelectedImage(null);
+    setSelectedImageIndex(null);
+  };
+
+  const goToPrevImage = () => {
+    if (restaurant?.menu_images && selectedImageIndex !== null) {
+      const newIndex = selectedImageIndex === 0 
+        ? restaurant.menu_images.length - 1 
+        : selectedImageIndex - 1;
+      setSelectedImageIndex(newIndex);
+    }
+  };
+
+  const goToNextImage = () => {
+    if (restaurant?.menu_images && selectedImageIndex !== null) {
+      const newIndex = selectedImageIndex === restaurant.menu_images.length - 1 
+        ? 0 
+        : selectedImageIndex + 1;
+      setSelectedImageIndex(newIndex);
+    }
+  };
+
+  // Keyboard navigation and touch handling
+  useEffect(() => {
+    const handleKeyPress = (e) => {
+      if (selectedImageIndex !== null) {
+        if (e.key === 'ArrowLeft') {
+          goToPrevImage();
+        } else if (e.key === 'ArrowRight') {
+          goToNextImage();
+        } else if (e.key === 'Escape') {
+          closeModal();
+        }
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyPress);
+    return () => document.removeEventListener('keydown', handleKeyPress);
+  }, [selectedImageIndex, restaurant?.menu_images]);
+
+  // Touch/swipe handling for mobile
+  const [touchStart, setTouchStart] = useState(null);
+  const [touchEnd, setTouchEnd] = useState(null);
+
+  const handleTouchStart = (e) => {
+    setTouchEnd(null);
+    setTouchStart(e.targetTouches[0].clientX);
+  };
+
+  const handleTouchMove = (e) => {
+    setTouchEnd(e.targetTouches[0].clientX);
+  };
+
+  const handleTouchEnd = () => {
+    if (!touchStart || !touchEnd) return;
+    const distance = touchStart - touchEnd;
+    const isLeftSwipe = distance > 50;
+    const isRightSwipe = distance < -50;
+
+    if (isLeftSwipe && restaurant?.menu_images && selectedImageIndex !== null) {
+      goToNextImage();
+    }
+    if (isRightSwipe && restaurant?.menu_images && selectedImageIndex !== null) {
+      goToPrevImage();
+    }
   };
 
   if (loading) {
@@ -115,8 +178,10 @@ export default function ShopDetail() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Main Content */}
           <div className="lg:col-span-2 space-y-8">
-            {/* Rating Component */}
-            <RatingComponent restaurantId={restaurant.id} restaurantName={restaurant.name} />
+            {/* Rating Component with compact styling */}
+            <div className="bg-white rounded-lg shadow-sm border p-4 text-xs">
+              <RatingComponent restaurantId={restaurant.id} restaurantName={restaurant.name} />
+            </div>
 
             {/* Menu Images */}
             <div className="bg-white rounded-xl shadow-lg border p-8">
@@ -129,7 +194,7 @@ export default function ShopDetail() {
                       <div 
                         key={index} 
                         className="relative group cursor-pointer transform transition-all duration-300 hover:scale-105"
-                        onClick={() => handleImageClick(image)}
+                        onClick={() => handleImageClick(index)}
                       >
                         <img
                           src={image}
@@ -205,18 +270,23 @@ export default function ShopDetail() {
         </div>
       </div>
 
-      {/* Enhanced Image Modal */}
-      {selectedImage && (
+      {/* Enhanced Image Modal with Navigation */}
+      {selectedImageIndex !== null && restaurant?.menu_images && (
         <div 
           className="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-50 p-4"
           onClick={closeModal}
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
         >
           <div className="relative max-w-6xl max-h-full" onClick={(e) => e.stopPropagation()}>
             <img
-              src={selectedImage}
-              alt="Menu enlarged"
+              src={restaurant.menu_images[selectedImageIndex]}
+              alt={`Menu ${selectedImageIndex + 1}`}
               className="max-w-full max-h-[90vh] object-contain rounded-lg shadow-2xl"
             />
+            
+            {/* Close Button */}
             <button
               onClick={closeModal}
               className="absolute -top-4 -right-4 bg-red-600 hover:bg-red-700 text-white rounded-full p-3 transition-colors duration-200 shadow-lg"
@@ -224,8 +294,39 @@ export default function ShopDetail() {
             >
               <FiX className="w-6 h-6" />
             </button>
-            <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 bg-black bg-opacity-50 text-white px-4 py-2 rounded-lg">
-           
+
+            {/* Navigation Arrows - Only show if more than 1 image */}
+            {restaurant.menu_images.length > 1 && (
+              <>
+                {/* Previous Button */}
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    goToPrevImage();
+                  }}
+                  className="absolute left-2 top-1/2 transform -translate-y-1/2 bg-black bg-opacity-30 hover:bg-opacity-50 text-white rounded p-1 transition-all duration-200"
+                  title="Previous image"
+                >
+                  <FiChevronLeft className="w-4 h-4" />
+                </button>
+
+                {/* Next Button */}
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    goToNextImage();
+                  }}
+                  className="absolute right-2 top-1/2 transform -translate-y-1/2 bg-black bg-opacity-30 hover:bg-opacity-50 text-white rounded p-1 transition-all duration-200"
+                  title="Next image"
+                >
+                  <FiChevronRight className="w-4 h-4" />
+                </button>
+              </>
+            )}
+
+            {/* Image Counter */}
+            <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 bg-black bg-opacity-50 text-white px-3 py-1 rounded-full text-sm">
+              {selectedImageIndex + 1} / {restaurant.menu_images.length}
             </div>
           </div>
         </div>

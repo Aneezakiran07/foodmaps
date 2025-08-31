@@ -1,17 +1,5 @@
-// supabaseReviewService.js - Fixed to match your new schema
+// supabaseReviewService.js - Cleaned up to use only device_id
 import { supabase } from './supabaseClient.js';
-
-// Get user's IP address
-const getUserIP = async () => {
-  try {
-    const response = await fetch('https://api.ipify.org?format=json');
-    const data = await response.json();
-    return data.ip;
-  } catch (error) {
-    console.error('Error getting IP:', error);
-    return 'anonymous';
-  }
-};
 
 // Get all reviews for a restaurant
 export const getRestaurantReviews = async (restaurantId) => {
@@ -21,7 +9,7 @@ export const getRestaurantReviews = async (restaurantId) => {
     const { data, error } = await supabase
       .from('reviews')
       .select('*')
-      .eq('restaurant_id', restaurantId) // FIXED: was 'restraunt_id'
+      .eq('restaurant_id', restaurantId)
       .order('created_at', { ascending: false });
 
     if (error) {
@@ -37,14 +25,12 @@ export const getRestaurantReviews = async (restaurantId) => {
   }
 };
 
-// Add a new review
-export const addReview = async (restaurantId, reviewData, userIP = null) => {
+// Add a new review - using only device_id
+export const addReview = async (restaurantId, reviewData, deviceId) => {
   try {
-    console.log('Adding review:', { restaurantId, reviewData, userIP });
-
-    // Get IP if not provided
-    if (!userIP || userIP === 'anonymous') {
-      userIP = await getUserIP();
+    if (!deviceId) {
+      console.error('Device ID is required');
+      return false;
     }
 
     // Validate restaurant exists
@@ -59,10 +45,11 @@ export const addReview = async (restaurantId, reviewData, userIP = null) => {
       return false;
     }
 
-    // Prepare review data
+    // Prepare review data - only device_id needed
     const dbData = {
-      restaurant_id: restaurantId, // FIXED: was 'restraunt_id'
-      user_ip: userIP,
+      restaurant_id: restaurantId,
+      device_id: deviceId,
+      user_ip: 'legacy', // Keep for schema compatibility but not used
       reviewer_name: reviewData.reviewerName?.trim() || 'Anonymous',
       comment: reviewData.comment?.trim() || '',
       images: reviewData.images || [],
@@ -87,7 +74,6 @@ export const addReview = async (restaurantId, reviewData, userIP = null) => {
       return false;
     }
 
-    console.log('✅ Successfully added review:', data[0]);
     return true;
 
   } catch (error) {
@@ -96,14 +82,14 @@ export const addReview = async (restaurantId, reviewData, userIP = null) => {
   }
 };
 
-// Update existing review
-export const updateReview = async (restaurantId, reviewData, userIP = null) => {
+// Update existing review - using only device_id
+export const updateReview = async (restaurantId, reviewData, deviceId) => {
   try {
-    console.log('Updating review:', { restaurantId, reviewData, userIP });
+    console.log('Updating review:', { restaurantId, reviewData, deviceId });
 
-    // Get IP if not provided
-    if (!userIP || userIP === 'anonymous') {
-      userIP = await getUserIP();
+    if (!deviceId) {
+      console.error('Device ID is required');
+      return false;
     }
 
     // Prepare update data
@@ -120,12 +106,12 @@ export const updateReview = async (restaurantId, reviewData, userIP = null) => {
       return false;
     }
 
-    // Update review
+    // Update using device_id
     const { data, error } = await supabase
       .from('reviews')
       .update(updateData)
-      .eq('restaurant_id', restaurantId) // FIXED: was 'restraunt_id'
-      .eq('user_ip', userIP)
+      .eq('restaurant_id', restaurantId)
+      .eq('device_id', deviceId)
       .select();
 
     if (error) {
@@ -134,7 +120,7 @@ export const updateReview = async (restaurantId, reviewData, userIP = null) => {
     }
 
     if (!data || data.length === 0) {
-      console.error('No review found to update');
+      console.error('No review found to update for device_id:', deviceId);
       return false;
     }
 
@@ -148,18 +134,17 @@ export const updateReview = async (restaurantId, reviewData, userIP = null) => {
 };
 
 // Check if user has already reviewed this restaurant
-export const hasUserReviewed = async (restaurantId, userIP = null) => {
+export const hasUserReviewed = async (restaurantId, deviceId) => {
   try {
-    // Get IP if not provided
-    if (!userIP || userIP === 'anonymous') {
-      userIP = await getUserIP();
+    if (!deviceId) {
+      return false;
     }
 
     const { data, error } = await supabase
       .from('reviews')
       .select('review_id')
-      .eq('restaurant_id', restaurantId) // FIXED: was 'restraunt_id'
-      .eq('user_ip', userIP)
+      .eq('restaurant_id', restaurantId)
+      .eq('device_id', deviceId)
       .maybeSingle();
 
     if (error) {
@@ -175,18 +160,17 @@ export const hasUserReviewed = async (restaurantId, userIP = null) => {
 };
 
 // Get user's previous review for this restaurant
-export const getUserReview = async (restaurantId, userIP = null) => {
+export const getUserReview = async (restaurantId, deviceId) => {
   try {
-    // Get IP if not provided
-    if (!userIP || userIP === 'anonymous') {
-      userIP = await getUserIP();
+    if (!deviceId) {
+      return null;
     }
 
     const { data, error } = await supabase
       .from('reviews')
       .select('*')
-      .eq('restaurant_id', restaurantId) // FIXED: was 'restraunt_id'
-      .eq('user_ip', userIP)
+      .eq('restaurant_id', restaurantId)
+      .eq('device_id', deviceId)
       .maybeSingle();
 
     if (error) {
@@ -202,18 +186,18 @@ export const getUserReview = async (restaurantId, userIP = null) => {
 };
 
 // Delete a review
-export const deleteReview = async (restaurantId, userIP = null) => {
+export const deleteReview = async (restaurantId, deviceId) => {
   try {
-    // Get IP if not provided
-    if (!userIP || userIP === 'anonymous') {
-      userIP = await getUserIP();
+    if (!deviceId) {
+      console.error('Device ID is required');
+      return false;
     }
 
     const { data, error } = await supabase
       .from('reviews')
       .delete()
-      .eq('restaurant_id', restaurantId) // FIXED: was 'restraunt_id'
-      .eq('user_ip', userIP)
+      .eq('restaurant_id', restaurantId)
+      .eq('device_id', deviceId)
       .select();
 
     if (error) {
@@ -222,7 +206,7 @@ export const deleteReview = async (restaurantId, userIP = null) => {
     }
 
     if (!data || data.length === 0) {
-      console.error('No review found to delete');
+      console.error('No review found to delete for device_id:', deviceId);
       return false;
     }
 
@@ -242,7 +226,7 @@ export const getReviewStats = async (restaurantId) => {
     const { data: reviewsData, error: reviewsError } = await supabase
       .from('reviews')
       .select('review_id')
-      .eq('restaurant_id', restaurantId); // FIXED: was 'restraunt_id'
+      .eq('restaurant_id', restaurantId);
 
     if (reviewsError) {
       console.error('Error fetching review count:', reviewsError);
@@ -327,9 +311,9 @@ export const getRecentReviews = async (limit = 10) => {
 export const getTopRatedRestaurants = async (limit = 5) => {
   try {
     const { data, error } = await supabase
-      .from('restaurant_stats') // Use your materialized view
+      .from('restaurant_stats')
       .select('*')
-      .gte('average_rating', 4) // Only 4+ star restaurants
+      .gte('average_rating', 4)
       .order('average_rating', { ascending: false })
       .order('total_reviews', { ascending: false })
       .limit(limit);

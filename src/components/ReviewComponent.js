@@ -3,7 +3,7 @@ import { FiUser, FiEdit3, FiTrash2, FiX, FiPlus, FiImage, FiUpload } from 'react
 import { SupabaseReviews } from '../utils/supabaseReviews';
 import CloudinaryService from '../utils/cloudinaryService.js';
 
-// Image Zoom Modal Component
+// Image Zoom Modal Component (unchanged)
 const ImageZoomModal = ({ src, alt, isOpen, onClose }) => {
   const [imageLoaded, setImageLoaded] = useState(false);
   const [imageDimensions, setImageDimensions] = useState({ width: 0, height: 0 });
@@ -93,7 +93,7 @@ const ReviewComponent = ({ restaurantId, restaurantName }) => {
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [userIP, setUserIP] = useState('anonymous');
+  const [deviceId, setDeviceId] = useState('');
   const [hasReviewed, setHasReviewed] = useState(false);
   const [showSuccessMessage, setShowSuccessMessage] = useState(false);
   const [uploadingImages, setUploadingImages] = useState(false);
@@ -111,7 +111,32 @@ const ReviewComponent = ({ restaurantId, restaurantName }) => {
   const [comment, setComment] = useState('');
   const [images, setImages] = useState([]);
   const [selectedFiles, setSelectedFiles] = useState([]);
+  const [filePreviews, setFilePreviews] = useState([]); // New state for file previews
   const [editingReview, setEditingReview] = useState(null);
+
+  const getDeviceId = () => {
+    const STORAGE_KEY = 'restaurant_app_device_id';
+    
+    try {
+      let storedDeviceId = localStorage.getItem(STORAGE_KEY);
+      
+      if (!storedDeviceId) {
+        storedDeviceId = 'device_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+        localStorage.setItem(STORAGE_KEY, storedDeviceId);
+        console.log('Generated NEW device ID:', storedDeviceId);
+      } else {
+        console.log('Using EXISTING device ID:', storedDeviceId);
+      }
+      
+      return storedDeviceId;
+    } catch (error) {
+      console.error('localStorage failed, using session-based ID');
+      if (!window.sessionDeviceId) {
+        window.sessionDeviceId = 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+      }
+      return window.sessionDeviceId;
+    }
+  };
 
   // Input sanitization
   const sanitizeInput = (input) => {
@@ -120,12 +145,12 @@ const ReviewComponent = ({ restaurantId, restaurantName }) => {
   };
 
   // Rate limiting check for reviews
-  const checkReviewRateLimit = async (ip) => {
+  const checkReviewRateLimit = async (deviceId) => {
     try {
       const today = new Date().toDateString();
-      const reviewsToday = JSON.parse(localStorage.getItem(`reviews_${ip}_${today}`) || '[]');
+      const reviewsToday = JSON.parse(localStorage.getItem(`reviews_${deviceId}_${today}`) || '[]');
       
-      if (reviewsToday.length >= 5) { // Max 5 reviews per day per IP
+      if (reviewsToday.length >= 5) {
         return { allowed: false, message: 'Daily review limit reached. You can submit up to 5 reviews per day.' };
       }
       
@@ -149,6 +174,33 @@ const ReviewComponent = ({ restaurantId, restaurantName }) => {
     }
   };
 
+  // Create preview URLs for selected files
+  const createFilePreviews = (files) => {
+    const previews = [];
+    files.forEach((file, index) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        previews[index] = {
+          file,
+          preview: e.target.result,
+          name: file.name
+        };
+        // Update state when all previews are ready
+        if (previews.length === files.length && previews.every(p => p)) {
+          setFilePreviews([...previews]);
+        }
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
+  // Remove a file from selected files and its preview
+  const removeSelectedFile = (indexToRemove) => {
+    setSelectedFiles(prev => prev.filter((_, index) => index !== indexToRemove));
+    setFilePreviews(prev => prev.filter((_, index) => index !== indexToRemove));
+    setErrorMessage('');
+  };
+
   useEffect(() => {
     if (restaurantId) {
       loadReviews();
@@ -169,16 +221,11 @@ const ReviewComponent = ({ restaurantId, restaurantName }) => {
       setLoading(true);
       setErrorMessage('');
       
-      // Get user's IP
-      const ipResponse = await fetch('https://api.ipify.org?format=json');
-      const ipData = await ipResponse.json();
-      const sanitizedIP = ipData.ip.replace(/[^0-9.]/g, '');
-      setUserIP(sanitizedIP);
+      const currentDeviceId = getDeviceId();
+      setDeviceId(currentDeviceId);
 
-      // Get all reviews for restaurant
       const reviewsData = await SupabaseReviews.getRestaurantReviews(restaurantId);
       
-      // Validate and sanitize review data
       const sanitizedReviews = reviewsData.map(review => ({
         ...review,
         reviewer_name: sanitizeInput(review.reviewer_name),
@@ -188,12 +235,11 @@ const ReviewComponent = ({ restaurantId, restaurantName }) => {
       
       setReviews(sanitizedReviews);
 
-      // Check if user has already reviewed
-      const userHasReviewed = await SupabaseReviews.hasUserReviewed(restaurantId, sanitizedIP);
+      const userHasReviewed = await SupabaseReviews.hasUserReviewed(restaurantId, currentDeviceId);
       setHasReviewed(userHasReviewed);
       
       const userReviewsToday = sanitizedReviews.filter(review => 
-        review.user_ip === sanitizedIP && isToday(review.created_at)
+        review.device_id === currentDeviceId && isToday(review.created_at)
       );
 
       if (userReviewsToday.length > 0) {
@@ -212,7 +258,7 @@ const ReviewComponent = ({ restaurantId, restaurantName }) => {
   };
 
   const handleImageClick = (imageUrl, altText) => {
-    if (validateImageUrl(imageUrl)) {
+    if (validateImageUrl(imageUrl) || imageUrl.startsWith('data:')) {
       setSelectedImage({ src: imageUrl, alt: altText });
       setIsZoomModalOpen(true);
     }
@@ -226,6 +272,14 @@ const ReviewComponent = ({ restaurantId, restaurantName }) => {
   const handleFileSelect = (e) => {
     const files = Array.from(e.target.files);
     
+    // Check if total files (existing + new) exceed limit
+    const totalFiles = selectedFiles.length + files.length;
+    if (totalFiles > 5) {
+      setErrorMessage(`You can only upload up to 5 images total. You currently have ${selectedFiles.length} selected.`);
+      e.target.value = '';
+      return;
+    }
+    
     // Validate files
     const validation = CloudinaryService.validateMultipleImages(files);
     if (!validation.valid) {
@@ -234,8 +288,16 @@ const ReviewComponent = ({ restaurantId, restaurantName }) => {
       return;
     }
 
-    setSelectedFiles(files);
+    // Add new files to existing selection
+    const newSelectedFiles = [...selectedFiles, ...files];
+    setSelectedFiles(newSelectedFiles);
+    
+    // Create previews for new files
+    createFilePreviews(newSelectedFiles);
     setErrorMessage('');
+    
+    // Clear the input value to allow selecting the same file again if needed
+    e.target.value = '';
   };
 
   const uploadImages = async () => {
@@ -251,6 +313,7 @@ const ReviewComponent = ({ restaurantId, restaurantName }) => {
         const validUrls = result.uploadedImages.filter(validateImageUrl);
         setImages(prev => [...prev, ...validUrls]);
         setSelectedFiles([]);
+        setFilePreviews([]);
         return validUrls;
       } else {
         const errorMsg = `Failed to upload ${result.failedUploads} out of ${result.totalUploads} images`;
@@ -288,7 +351,7 @@ const ReviewComponent = ({ restaurantId, restaurantName }) => {
 
     // Check rate limiting for new reviews
     if (!editingReview) {
-      const rateLimitCheck = await checkReviewRateLimit(userIP);
+      const rateLimitCheck = await checkReviewRateLimit(deviceId);
       if (!rateLimitCheck.allowed) {
         setErrorMessage(rateLimitCheck.message);
         return;
@@ -322,16 +385,15 @@ const ReviewComponent = ({ restaurantId, restaurantName }) => {
 
       let success;
       if (editingReview) {
-        success = await SupabaseReviews.updateReview(restaurantId, reviewData, userIP);
+        success = await SupabaseReviews.updateReview(restaurantId, reviewData, deviceId);
       } else {
-        success = await SupabaseReviews.addReview(restaurantId, reviewData, userIP);
+        success = await SupabaseReviews.addReview(restaurantId, reviewData, deviceId);
         
-        // Update rate limiting storage
         if (success) {
           const today = new Date().toDateString();
-          const existing = JSON.parse(localStorage.getItem(`reviews_${userIP}_${today}`) || '[]');
+          const existing = JSON.parse(localStorage.getItem(`reviews_${deviceId}_${today}`) || '[]');
           existing.push({ timestamp: Date.now(), restaurantId });
-          localStorage.setItem(`reviews_${userIP}_${today}`, JSON.stringify(existing));
+          localStorage.setItem(`reviews_${deviceId}_${today}`, JSON.stringify(existing));
         }
       }
 
@@ -368,6 +430,7 @@ const ReviewComponent = ({ restaurantId, restaurantName }) => {
     setComment(review.comment);
     setImages(Array.isArray(review.images) ? review.images.filter(validateImageUrl) : []);
     setSelectedFiles([]);
+    setFilePreviews([]);
     setErrorMessage('');
     setShowEditModal(true);
   };
@@ -378,7 +441,7 @@ const ReviewComponent = ({ restaurantId, restaurantName }) => {
     }
 
     try {
-      const success = await SupabaseReviews.deleteReview(restaurantId, userIP);
+      const success = await SupabaseReviews.deleteReview(restaurantId, deviceId);
       if (success) {
         loadReviews();
       } else {
@@ -395,6 +458,7 @@ const ReviewComponent = ({ restaurantId, restaurantName }) => {
     setComment('');
     setImages([]);
     setSelectedFiles([]);
+    setFilePreviews([]);
     setEditingReview(null);
     setErrorMessage('');
   };
@@ -408,6 +472,119 @@ const ReviewComponent = ({ restaurantId, restaurantName }) => {
       minute: '2-digit'
     });
   };
+
+  // Enhanced Image Upload Section Component
+  const ImageUploadSection = ({ modalId }) => (
+    <div>
+      <label className="block text-sm font-medium text-gray-700 mb-2">
+        Add Photos (Optional - Max 5 total)
+      </label>
+      
+      {/* File Input */}
+      <div className="mb-3">
+        <input
+          type="file"
+          id={`imageUpload${modalId}`}
+          multiple
+          accept="image/jpeg,image/jpg,image/png,image/webp"
+          onChange={handleFileSelect}
+          className="hidden"
+          disabled={selectedFiles.length + images.length >= 5}
+        />
+        <label
+          htmlFor={`imageUpload${modalId}`}
+          className={`inline-flex items-center px-4 py-2 border border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50 focus-within:ring-2 focus-within:ring-orange-500 transition ${
+            selectedFiles.length + images.length >= 5 ? 'opacity-50 cursor-not-allowed' : ''
+          }`}
+        >
+          <FiImage className="w-4 h-4 mr-2" />
+          Choose Photos
+        </label>
+        <span className="ml-2 text-sm text-gray-600">
+          ({selectedFiles.length + images.length}/5)
+        </span>
+      </div>
+
+      {/* File Previews (before upload) */}
+      {filePreviews.length > 0 && (
+        <div className="mb-4">
+          <p className="text-sm text-gray-600 mb-2">Selected files (not uploaded yet):</p>
+          <div className="grid grid-cols-3 gap-2">
+            {filePreviews.map((filePreview, index) => (
+              <div key={`preview-${index}`} className="relative group">
+                <img
+                  src={filePreview.preview}
+                  alt={`Preview ${index + 1}`}
+                  className="w-full h-16 object-cover rounded border cursor-pointer hover:opacity-80 transition"
+                  onClick={() => handleImageClick(filePreview.preview, `Preview ${index + 1}`)}
+                />
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    removeSelectedFile(index);
+                  }}
+                  className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-red-500"
+                  aria-label="Remove selected file"
+                >
+                  ×
+                </button>
+                <div className="absolute bottom-0 left-0 right-0 bg-black bg-opacity-70 text-white text-xs p-1 rounded-b truncate">
+                  {filePreview.name}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Upload Button */}
+      {selectedFiles.length > 0 && (
+        <div className="mb-3">
+          <button
+            type="button"
+            onClick={uploadImages}
+            disabled={uploadingImages}
+            className="inline-flex items-center px-3 py-2 bg-blue-500 text-white text-sm rounded-lg hover:bg-blue-600 disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
+          >
+            <FiUpload className="w-4 h-4 mr-2" />
+            {uploadingImages ? 'Uploading...' : `Upload ${selectedFiles.length} Photo(s)`}
+          </button>
+        </div>
+      )}
+
+      {/* Uploaded Images Preview */}
+      {images.length > 0 && (
+        <div>
+          <p className="text-sm text-gray-600 mb-2">Uploaded images:</p>
+          <div className="grid grid-cols-3 gap-2">
+            {images.map((imageUrl, index) => (
+              <div key={`uploaded-${index}`} className="relative group">
+                <img
+                  src={imageUrl}
+                  alt={`Uploaded ${index + 1}`}
+                  className="w-full h-16 object-cover rounded border cursor-pointer hover:opacity-80 transition"
+                  onClick={() => handleImageClick(imageUrl, `Uploaded ${index + 1}`)}
+                  loading="lazy"
+                />
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    removeImage(index);
+                  }}
+                  className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-red-500"
+                  aria-label="Remove uploaded image"
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
 
   if (loading) {
     return (
@@ -477,8 +654,7 @@ const ReviewComponent = ({ restaurantId, restaurantName }) => {
                     </div>
                   </div>
                   
-                  {/* Show edit/delete buttons for user's own review */}
-                  {review.user_ip === userIP && (
+                  {review.device_id === deviceId && (
                     <div className="flex gap-2">
                       <button
                         onClick={() => handleEditReview(review)}
@@ -646,82 +822,8 @@ const ReviewComponent = ({ restaurantId, restaurantName }) => {
                 <p id="review-help" className="text-xs text-gray-500 mt-1">Minimum 10 characters</p>
               </div>
 
-              {/* Image Upload Section */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Add Photos (Optional - Max 5)
-                </label>
-                
-                {/* File Input */}
-                <div className="mb-3">
-                  <input
-                    type="file"
-                    id="imageUpload"
-                    multiple
-                    accept="image/jpeg,image/jpg,image/png,image/webp"
-                    onChange={handleFileSelect}
-                    className="hidden"
-                  />
-                  <label
-                    htmlFor="imageUpload"
-                    className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50 focus-within:ring-2 focus-within:ring-orange-500 transition"
-                  >
-                    <FiImage className="w-4 h-4 mr-2" />
-                    Choose Photos
-                  </label>
-                  {selectedFiles.length > 0 && (
-                    <span className="ml-2 text-sm text-gray-600">
-                      {selectedFiles.length} file(s) selected
-                    </span>
-                  )}
-                </div>
-
-                {/* Upload Button */}
-                {selectedFiles.length > 0 && (
-                  <div className="mb-3">
-                    <button
-                      type="button"
-                      onClick={uploadImages}
-                      disabled={uploadingImages}
-                      className="inline-flex items-center px-3 py-2 bg-blue-500 text-white text-sm rounded-lg hover:bg-blue-600 disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
-                    >
-                      <FiUpload className="w-4 h-4 mr-2" />
-                      {uploadingImages ? 'Uploading...' : 'Upload Photos'}
-                    </button>
-                  </div>
-                )}
-
-                {/* Uploaded Images Preview */}
-                {images.length > 0 && (
-                  <div>
-                    <p className="text-sm text-gray-600 mb-2">Uploaded images:</p>
-                    <div className="grid grid-cols-3 gap-2">
-                      {images.map((imageUrl, index) => (
-                        <div key={index} className="relative group">
-                          <img
-                            src={imageUrl}
-                            alt={`Preview ${index + 1}`}
-                            className="w-full h-16 object-cover rounded border cursor-pointer hover:opacity-80 transition"
-                            onClick={() => handleImageClick(imageUrl, `Preview ${index + 1}`)}
-                            loading="lazy"
-                          />
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              removeImage(index);
-                            }}
-                            className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-red-500"
-                            aria-label="Remove image"
-                          >
-                            ×
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
+              {/* Enhanced Image Upload Section */}
+              <ImageUploadSection modalId="Add" />
 
               <div className="flex justify-end space-x-3 pt-4">
                 <button
@@ -804,82 +906,8 @@ const ReviewComponent = ({ restaurantId, restaurantName }) => {
                 />
               </div>
               
-              {/* Image Upload Section */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Add Photos (Optional - Max 5)
-                </label>
-                
-                {/* File Input */}
-                <div className="mb-3">
-                  <input
-                    type="file"
-                    id="imageUploadEdit"
-                    multiple
-                    accept="image/jpeg,image/jpg,image/png,image/webp"
-                    onChange={handleFileSelect}
-                    className="hidden"
-                  />
-                  <label
-                    htmlFor="imageUploadEdit"
-                    className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50 focus-within:ring-2 focus-within:ring-orange-500 transition"
-                  >
-                    <FiImage className="w-4 h-4 mr-2" />
-                    Choose Photos
-                  </label>
-                  {selectedFiles.length > 0 && (
-                    <span className="ml-2 text-sm text-gray-600">
-                      {selectedFiles.length} file(s) selected
-                    </span>
-                  )}
-                </div>
-
-                {/* Upload Button */}
-                {selectedFiles.length > 0 && (
-                  <div className="mb-3">
-                    <button
-                      type="button"
-                      onClick={uploadImages}
-                      disabled={uploadingImages}
-                      className="inline-flex items-center px-3 py-2 bg-blue-500 text-white text-sm rounded-lg hover:bg-blue-600 disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
-                    >
-                      <FiUpload className="w-4 h-4 mr-2" />
-                      {uploadingImages ? 'Uploading...' : 'Upload Photos'}
-                    </button>
-                  </div>
-                )}
-
-                {/* Uploaded Images Preview */}
-                {images.length > 0 && (
-                  <div>
-                    <p className="text-sm text-gray-600 mb-2">Uploaded images:</p>
-                    <div className="grid grid-cols-3 gap-2">
-                      {images.map((imageUrl, index) => (
-                        <div key={index} className="relative group">
-                          <img
-                            src={imageUrl}
-                            alt={`Preview ${index + 1}`}
-                            className="w-full h-16 object-cover rounded border cursor-pointer hover:opacity-80 transition"
-                            onClick={() => handleImageClick(imageUrl, `Preview ${index + 1}`)}
-                            loading="lazy"
-                          />
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              removeImage(index);
-                            }}
-                            className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-red-500"
-                            aria-label="Remove image"
-                          >
-                            ×
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
+              {/* Enhanced Image Upload Section */}
+              <ImageUploadSection modalId="Edit" />
 
               <div className="flex justify-end space-x-3 pt-4">
                 <button

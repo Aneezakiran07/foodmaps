@@ -1,3 +1,4 @@
+//new supabaserest service
 // supabaseRestaurantService.js - Restaurant management for schema
 import { supabase } from './supabaseClient.js';
 

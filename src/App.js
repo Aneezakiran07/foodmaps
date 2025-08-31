@@ -9,6 +9,7 @@ import ShopDetail from "./components/ShopDetail";
 import About from "./components/About";
 import Contact from "./components/Contact";
 import SuggestionsPage from "./components/SuggestionsPage";
+import WhatsHotPage from "./components/WhatsHotPage";
 import AdminPanel from './AdminPanel';
 
 export default function App() {
@@ -22,6 +23,7 @@ export default function App() {
             <Route path="/shops" element={<ShopsList />} />
             <Route path="/shops/:shopId" element={<ShopDetail />} />
             <Route path="/suggestions" element={<SuggestionsPage />} />
+            <Route path="/whats-hot" element={<WhatsHotPage />} />
             <Route path="/about" element={<About />} />
             <Route path="/contact" element={<Contact />} />
             <Route path="/admin" element={<AdminPanel />} />

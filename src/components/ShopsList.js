@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { FiStar, FiFilter, FiChevronDown, FiChevronUp, FiX, FiSearch } from 'react-icons/fi';
 import { publicHelpers, adminHelpers } from '../utils/supabaseClient';
+import { SupabaseRatings } from '../utils/supabaseRatingService';
 
 const ShopsList = () => {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -69,21 +70,12 @@ const ShopsList = () => {
       const restaurants = await publicHelpers.fetchRestaurants();
       console.log('📊 Fetched restaurants:', restaurants.length);
       
-      // Then fetch detailed ratings for each restaurant individually
+      // Then fetch ratings for each restaurant using the updated service
       const restaurantsWithDetailedRatings = await Promise.all(
         restaurants.map(async (restaurant) => {
           try {
-            // Fetch detailed restaurant data (same as Shop Detail Page)
-            const detailedData = await publicHelpers.fetchRestaurantDetail(restaurant.id);
-            
-            // Calculate average rating from the detailed data structure
-            const ratings = detailedData.ratings || [];
-            const validRatings = ratings.filter(r => r.rating && r.rating > 0);
-            const averageRating = validRatings.length > 0 
-              ? (validRatings.reduce((sum, r) => sum + r.rating, 0) / validRatings.length)
-              : 0;
-            
-            const totalRatings = validRatings.length || 0;
+            // Use the updated rating service that fetches from materialized view
+            const ratingsData = await SupabaseRatings.getRestaurantRatings(restaurant.id);
             
             return {
               ...restaurant,
@@ -93,8 +85,8 @@ const ShopsList = () => {
               cuisine: restaurant.cuisines?.map(c => c.name).join(', ') || 'Restaurant',
               location: restaurant.address,
               priceRange: null,
-              averageRating: averageRating,
-              totalRatings: totalRatings,
+              averageRating: ratingsData.average || 0,
+              totalRatings: ratingsData.count || 0,
               image_url: restaurant.image_url,
               cuisines: restaurant.cuisines, // This already has the correct structure from fetchRestaurants
               address: restaurant.address,
@@ -103,8 +95,8 @@ const ShopsList = () => {
               created_at: restaurant.created_at
             };
           } catch (error) {
-            console.error(`❌ Error loading details for restaurant ${restaurant.id}:`, error);
-            // Return basic restaurant data if detailed fetch fails
+            console.error(`❌ Error loading ratings for restaurant ${restaurant.id}:`, error);
+            // Return basic restaurant data if rating fetch fails
             return {
               ...restaurant,
               image: restaurant.image_url,
